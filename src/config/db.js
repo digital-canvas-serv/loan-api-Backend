@@ -1,6 +1,13 @@
 import { PrismaClient } from '@prisma/client';
 
-export const prisma = new PrismaClient();
+let prismaInstance = null;
+
+export function getPrisma() {
+  if (!prismaInstance) {
+    prismaInstance = new PrismaClient();
+  }
+  return prismaInstance;
+}
 
 /**
  * Prisma aborts an interactive transaction after 5 seconds by default. Anything
@@ -10,3 +17,10 @@ export const prisma = new PrismaClient();
  * round trip plus the byte transfer.
  */
 export const TRANSACTION_OPTIONS = { maxWait: 15_000, timeout: 60_000 };
+
+// Backward compatibility - lazy getter
+export const prisma = new Proxy({}, {
+  get(_target, prop) {
+    return getPrisma()[prop];
+  },
+});
