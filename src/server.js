@@ -10,7 +10,52 @@ import { errorHandler, notFound } from './middleware/error.js';
 const app = express();
 app.set('trust proxy', 1);
 app.use(helmet());
-app.use(cors({ origin: env.CORS_ORIGIN.split(',').map((origin) => origin.trim()), credentials: false }));
+
+// CORS configuration with support for wildcard subdomains (preview deployments)
+const allowedOrigins = [
+  'https://loan-frontend-cyan.vercel.app',
+  'https://coloan.technlogs.app',
+];
+
+// Add any additional origins from environment variable
+if (env.CORS_ORIGIN) {
+  env.CORS_ORIGIN.split(',').map((origin) => origin.trim()).forEach((origin) => {
+    if (origin && !allowedOrigins.includes(origin)) {
+      allowedOrigins.push(origin);
+    }
+  });
+}
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Check for preview deployment pattern: https://loan-frontend-*.vercel.app
+    const previewPattern = /^https:\/\/loan-frontend-[a-z0-9-]+\.vercel\.app$/;
+    if (previewPattern.test(origin)) {
+      return callback(null, true);
+    }
+
+    // Check for coloan.technlogs.app subdomains if needed
+    const coloanPattern = /^https:\/\/([a-z0-9-]+\.)?coloan\.technlogs\.app$/;
+    if (coloanPattern.test(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('tiny'));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 200 }));

@@ -26,6 +26,20 @@ export async function login(req, res) {
   res.json({ token: signToken(user), user: publicUser(user) });
 }
 
+export async function adminLogin(req, res) {
+  const { email, password } = req.body;
+  const user = await prisma.user.findUnique({ where: { email: email?.toLowerCase().trim() } });
+  if (!user || !(await comparePassword(password || '', user.passwordHash))) return res.status(401).json({ message: 'Email or password is incorrect.' });
+  if (user.status !== 'APPROVED') return res.status(403).json({ code: 'ACCOUNT_NOT_APPROVED', status: user.status, message: statusMessage(user.status, user.reviewNote) });
+  // Validate admin role
+  if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+    await writeAudit({ actorId: user.id, action: 'ADMIN_LOGIN_FAILED', entityType: 'USER', entityId: user.id, req, meta: { reason: 'NOT_ADMIN', role: user.role } });
+    return res.status(403).json({ message: 'Admin access required. This account does not have administrator privileges.' });
+  }
+  await writeAudit({ actorId: user.id, action: 'ADMIN_LOGIN', entityType: 'USER', entityId: user.id, req });
+  res.json({ token: signToken(user), user: publicUser(user) });
+}
+
 export async function logout(req, res) {
   await writeAudit({ actorId: req.user.id, action: 'LOGOUT', entityType: 'USER', entityId: req.user.id, req });
   res.json({ message: 'Signed out.' });

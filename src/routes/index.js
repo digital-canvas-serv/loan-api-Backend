@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { changePassword, login, logout, me, register } from '../controllers/auth.js';
+import { changePassword, login, adminLogin, logout, me, register } from '../controllers/auth.js';
 import { createDocumentType, downloadDocument, listDocumentTypes as listAdminDocumentTypes, listDocuments, listUsers, reviewDocument, reviewUser, setCredentials, updateDocumentType } from '../controllers/adminUsers.js';
 import { downloadOwnDocument, getProfile, listDocumentTypes, updateProfile, uploadDocuments, uploadProfilePhoto } from '../controllers/profile.js';
 import { dashboard } from '../controllers/dashboard.js';
@@ -16,6 +16,7 @@ const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { files: 5, fileSize: 5 * 1024 * 1024 }, fileFilter: (req, file, callback) => callback(null, ['application/pdf', 'image/jpeg', 'image/png'].includes(file.mimetype)) });
 router.post('/auth/register', upload.array('documents', 5), wrap(register));
 router.post('/auth/login', wrap(login));
+router.post('/auth/admin/login', wrap(adminLogin));
 router.post('/auth/logout', requireAuth, wrap(logout));
 router.get('/auth/me', requireAuth, wrap(me));
 router.post('/auth/change-password', requireAuth, wrap(changePassword));
