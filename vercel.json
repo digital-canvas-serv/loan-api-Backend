@@ -2,5 +2,18 @@
   "version": 2,
   "buildCommand": "prisma generate",
   "builds": [{ "src": "src/server.js", "use": "@vercel/node" }],
-  "routes": [{ "src": "/(.*)", "dest": "src/server.js" }]
+  "routes": [
+    { "src": "/auth/(.*)", "dest": "/api/auth/$1" },
+    { "src": "/admin/(.*)", "dest": "/api/admin/$1" },
+    { "src": "/profile/(.*)", "dest": "/api/profile/$1" },
+    { "src": "/dashboard/(.*)", "dest": "/api/dashboard/$1" },
+    { "src": "/loans/(.*)", "dest": "/api/loans/$1" },
+    { "src": "/loan-products/(.*)", "dest": "/api/loan-products/$1" },
+    { "src": "/collaterals/(.*)", "dest": "/api/collaterals/$1" },
+    { "src": "/repayments/(.*)", "dest": "/api/repayments/$1" },
+    { "src": "/payments/(.*)", "dest": "/api/payments/$1" },
+    { "src": "/notifications/(.*)", "dest": "/api/notifications/$1" },
+    { "src": "/health/(.*)", "dest": "/health/$1" },
+    { "src": "/(.*)", "dest": "src/server.js" }
+  ]
 }
