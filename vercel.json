@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "prisma generate",
+  "buildCommand": "prisma generate && node prisma/seed.js",
   "builds": [{ "src": "src/server.js", "use": "@vercel/node" }],
   "routes": [
     { "src": "/auth/(.*)", "dest": "/api/auth/$1" },
