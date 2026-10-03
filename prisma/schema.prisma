@@ -157,7 +157,8 @@ model ProfileDocument {
   filename        String
   mimeType        String
   size            Int
-  content         Bytes              @db.ByteA
+  blobUrl         String?
+  blobPathname    String?
   status          KycDocumentStatus  @default(PENDING)
   rejectionReason String?
   uploadedAt      DateTime           @default(now())
@@ -188,7 +189,8 @@ model KycDocument {
   filename        String
   mimeType        String
   size            Int
-  content         Bytes             @db.ByteA
+  blobUrl         String?
+  blobPathname    String?
 
   @@index([userId, status])
 }
@@ -270,7 +272,8 @@ model LoanDocument {
   filename    String
   mimeType    String
   size        Int
-  content     Bytes         @db.ByteA
+  blobUrl         String?
+  blobPathname    String?
   status      KycDocumentStatus @default(PENDING)
   rejectionReason String?
   uploadedAt  DateTime      @default(now())

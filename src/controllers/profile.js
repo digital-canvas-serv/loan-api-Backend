@@ -1,5 +1,6 @@
 import { prisma, TRANSACTION_OPTIONS } from '../config/db.js';
 import { z } from 'zod';
+import { uploadToBlob, downloadFromBlob, isBlobConfigured } from '../services/storage.js';
 
 const profileSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
@@ -39,15 +40,59 @@ export async function uploadDocuments(req, res) {
   if (!req.files?.length) return res.status(400).json({ message: 'At least one document is required.' });
   const typeId = req.body.documentTypeId || null;
   if (typeId && !await prisma.documentType.findFirst({ where: { id: typeId, active: true } })) return res.status(400).json({ message: 'Invalid document type.' });
-  const documents = await prisma.$transaction(req.files.map((file) => prisma.profileDocument.create({ data: { userId: req.user.id, uploadedBy: req.user.id, documentTypeId: typeId, filename: file.originalname, mimeType: file.mimetype, size: file.size, content: file.buffer } })), TRANSACTION_OPTIONS);
-  res.status(201).json({ documents: documents.map(({ content, ...document }) => document), message: 'Documents uploaded for review.' });
+
+  const documents = [];
+  for (const file of req.files) {
+    let blobUrl = null;
+    let blobPathname = null;
+
+    if (isBlobConfigured()) {
+      const blob = await uploadToBlob(file.buffer, {
+        filename: file.originalname,
+        contentType: file.mimetype,
+        access: 'private',
+      });
+      blobUrl = blob.url;
+      blobPathname = blob.pathname;
+    }
+
+    const document = await prisma.profileDocument.create({
+      data: {
+        userId: req.user.id,
+        uploadedBy: req.user.id,
+        documentTypeId: typeId,
+        filename: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        blobUrl,
+        blobPathname,
+      },
+    });
+    documents.push(document);
+  }
+
+  res.status(201).json({ documents, message: 'Documents uploaded for review.' });
 }
 
 export async function uploadProfilePhoto(req, res) {
   const file = req.file;
   if (!file) return res.status(400).json({ message: 'A profile photo is required.' });
   const type = await prisma.documentType.upsert({ where: { name: 'Profile photo' }, update: { active: true, required: false }, create: { name: 'Profile photo', required: false } });
-  const document = await prisma.profileDocument.create({ data: { userId: req.user.id, uploadedBy: req.user.id, documentTypeId: type.id, filename: file.originalname, mimeType: file.mimetype, size: file.size, content: file.buffer } });
+
+  let blobUrl = null;
+  let blobPathname = null;
+
+  if (isBlobConfigured()) {
+    const blob = await uploadToBlob(file.buffer, {
+      filename: file.originalname,
+      contentType: file.mimetype,
+      access: 'private',
+    });
+    blobUrl = blob.url;
+    blobPathname = blob.pathname;
+  }
+
+  const document = await prisma.profileDocument.create({ data: { userId: req.user.id, uploadedBy: req.user.id, documentTypeId: type.id, filename: file.originalname, mimeType: file.mimetype, size: file.size, blobUrl, blobPathname } });
   await prisma.user.update({ where: { id: req.user.id }, data: { profilePhoto: document.id } });
   res.status(201).json({ photo: { id: document.id, filename: document.filename }, message: 'Profile photo uploaded for review.' });
 }
@@ -55,7 +100,18 @@ export async function uploadProfilePhoto(req, res) {
 export async function downloadOwnDocument(req, res) {
   const document = await prisma.profileDocument.findFirst({ where: { id: req.params.documentId, userId: req.user.id } });
   if (!document) return res.status(404).json({ message: 'Document not found.' });
-  res.setHeader('Content-Type', document.mimeType);
-  res.setHeader('Content-Disposition', `attachment; filename="${document.filename.replace(/"/g, '')}"`);
-  res.send(document.content);
+
+  if (isBlobConfigured() && document.blobPathname) {
+    try {
+      const blob = await downloadFromBlob(document.blobPathname);
+      res.setHeader('Content-Type', document.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${document.filename.replace(/"/g, '')}"`);
+      return blob.stream().pipe(res);
+    } catch (error) {
+      console.error('Blob download error:', error);
+      return res.status(500).json({ message: 'Failed to download document from storage.' });
+    }
+  }
+
+  return res.status(404).json({ message: 'Document content not available in storage.' });
 }

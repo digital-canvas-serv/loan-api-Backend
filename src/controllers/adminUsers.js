@@ -2,6 +2,7 @@ import { prisma } from '../config/db.js';
 import { hashPassword, publicUser } from '../utils/auth.js';
 import { writeAudit } from '../utils/audit.js';
 import { createNotification } from '../utils/audit.js';
+import { downloadFromBlob, isBlobConfigured } from '../services/storage.js';
 
 export async function listUsers(req, res) {
   const page = Math.max(1, Number(req.query.page) || 1); const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20)); const search = String(req.query.search || '').trim(); const status = String(req.query.status || '');
@@ -37,9 +38,20 @@ export async function listDocuments(req, res) {
 export async function downloadDocument(req, res) {
   const document = await prisma.profileDocument.findFirst({ where: { id: req.params.documentId, userId: req.params.id } });
   if (!document) return res.status(404).json({ message: 'Document not found.' });
-  res.setHeader('Content-Type', document.mimeType);
-  res.setHeader('Content-Disposition', `attachment; filename="${document.filename.replace(/"/g, '')}"`);
-  res.send(document.content);
+
+  if (isBlobConfigured() && document.blobPathname) {
+    try {
+      const blob = await downloadFromBlob(document.blobPathname);
+      res.setHeader('Content-Type', document.mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${document.filename.replace(/"/g, '')}"`);
+      return blob.stream().pipe(res);
+    } catch (error) {
+      console.error('Blob download error:', error);
+      return res.status(500).json({ message: 'Failed to download document from storage.' });
+    }
+  }
+
+  return res.status(404).json({ message: 'Document content not available in storage.' });
 }
 
 export async function reviewDocument(req, res) {
@@ -50,7 +62,7 @@ export async function reviewDocument(req, res) {
   if (!document) return res.status(404).json({ message: 'Document not found.' });
   const updated = await prisma.profileDocument.update({ where: { id: document.id }, data: { status, rejectionReason: ['REJECTED', 'REQUIRES_UPDATE'].includes(status) ? rejectionReason.trim() : null, verifiedBy: ['VERIFIED', 'REJECTED'].includes(status) ? req.user.id : null, verifiedAt: ['VERIFIED', 'REJECTED'].includes(status) ? new Date() : null } });
   await writeAudit({ actorId: req.user.id, action: `DOCUMENT_${status}`, entityType: 'DOCUMENT', entityId: updated.id, metadata: { userId: req.params.id, rejectionReason: rejectionReason || null } });
-  res.json({ document: { ...updated, content: undefined }, message: 'Document review updated.' });
+  res.json({ document: updated, message: 'Document review updated.' });
 }
 
 export async function listDocumentTypes(req, res) {
