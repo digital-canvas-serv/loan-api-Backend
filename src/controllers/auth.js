@@ -22,10 +22,10 @@ export async function login(req, res) {
   const user = await prisma.user.findUnique({ where: { email: email?.toLowerCase().trim() } });
   if (!user || !(await comparePassword(password || '', user.passwordHash))) return res.status(401).json({ message: 'Email or password is incorrect.' });
   if (user.status !== 'APPROVED') return res.status(403).json({ code: 'ACCOUNT_NOT_APPROVED', status: user.status, message: statusMessage(user.status, user.reviewNote) });
-  // Prevent admins from using regular login - they must use /api/auth/admin/login
+  // Prevent admins from using regular login - return generic error
   if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
     await writeAudit({ actorId: user.id, action: 'LOGIN_FAILED', entityType: 'USER', entityId: user.id, req, meta: { reason: 'ADMIN_USE_ADMIN_LOGIN', role: user.role } });
-    return res.status(403).json({ message: 'Administrators must sign in via the admin portal.' });
+    return res.status(401).json({ message: 'Email or password is incorrect.' });
   }
   await writeAudit({ actorId: user.id, action: 'LOGIN', entityType: 'USER', entityId: user.id, req });
   res.json({ token: signToken(user), user: publicUser(user) });
